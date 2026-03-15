@@ -1,0 +1,145 @@
+---
+title: Getting Started
+description: Install log-wiz and write your first log in under 5 minutes.
+---
+
+import { Tabs, TabItem, Aside, Steps } from '@astrojs/starlight/components';
+
+## Installation
+
+<Tabs>
+  <TabItem label="npm">
+    ```bash
+    npm install @gouranga_samrat/log-wiz
+    ```
+  </TabItem>
+  <TabItem label="yarn">
+    ```bash
+    yarn add @gouranga_samrat/log-wiz
+    ```
+  </TabItem>
+  <TabItem label="pnpm">
+    ```bash
+    pnpm add @gouranga_samrat/log-wiz
+    ```
+  </TabItem>
+</Tabs>
+
+**Requirements:** Node.js ≥ 18, or any modern browser. Zero runtime dependencies.
+
+---
+
+## Your first log
+
+<Steps>
+
+1. **Import the default singleton**
+
+   ```typescript
+   import { wiz } from '@gouranga_samrat/log-wiz';
+   ```
+
+2. **Write logs at any level**
+
+   ```typescript
+   wiz.trace('entering parseConfig()');
+   wiz.debug('config loaded', { meta: { entries: 12 } });
+   wiz.info('Server ready', { meta: { port: 3000, env: 'development' } });
+   wiz.warn('Memory usage high', { meta: { usedMB: 480, limitMB: 512 } });
+   wiz.error('Request failed', { error: new Error('ECONNREFUSED') });
+   wiz.fatal('Out of disk space — shutting down');
+   ```
+
+3. **See the output**
+
+   In development you'll see rich, coloured output:
+
+   ```
+   █ INF  2024-05-15 14:32:01.123 Server ready
+     meta: { "port": 3000, "env": "development" }
+
+   █ ERR  2024-05-15 14:32:02.456 Request failed
+     Error: ECONNREFUSED
+       at connect (src/db/client.ts:22:9)
+       at DBPool   (src/db/pool.ts:41:5)
+   ```
+
+   In production (`NODE_ENV=production`) you'll get compact JSON:
+
+   ```json
+   {"timestamp":"2024-05-15T14:32:01.123Z","level":"info","env":"node","message":"Server ready","meta":{"port":3000}}
+   ```
+
+</Steps>
+
+---
+
+## Zero-config defaults
+
+The `wiz` singleton auto-detects your environment and applies sensible defaults:
+
+| Environment | Output format | File logging |
+|---|---|---|
+| Development (Node.js) | Pretty ANSI colours | Enabled (`./logs/`) |
+| Production / CI | Compact JSON | Enabled (`./logs/`) |
+| Browser | Grouped DevTools | Disabled |
+
+<Aside type="tip">
+  Pass `file: false` to disable file logging during development or testing.
+  ```typescript
+  const logger = new Wiz({ file: false });
+  ```
+</Aside>
+
+---
+
+## Creating a named instance
+
+For larger applications, create a separate logger per subsystem:
+
+```typescript
+import { Wiz } from "@gouranga_samrat/log-wiz";
+
+const logger = new Wiz({
+  scope: "payment-service",
+  level: "info",
+  file: { dir: "./logs", maxFiles: 7 },
+});
+
+logger.info("Processing charge", {
+  meta: { amount: 9900, currency: "USD" },
+});
+// -> █ INF  ... [payment-service] Processing charge
+```
+
+---
+
+## PII masking — automatic, out of the box
+
+Sensitive fields are **never** written to any output:
+
+```typescript
+wiz.info("Login attempt", {
+  meta: {
+    username: "alice",
+    password: "hunter2",       // -> [MASKED]
+    token: "eyJhbGciOiJ...",   // -> [MASKED]
+    email: "alice@example.com" // visible — not a default masked key
+  },
+});
+```
+
+See [PII Masking →](/log-wiz-docs/guides/pii-masking/) for the full key list and customisation options.
+
+---
+
+## Graceful shutdown
+
+When using file logging, always flush before your process exits:
+
+```typescript
+process.on("SIGTERM", async () => {
+  await logger.close(); // flush buffer, close WriteStream
+  process.exit(0);
+});
+```
