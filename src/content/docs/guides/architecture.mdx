@@ -1,0 +1,114 @@
+---
+title: Architecture
+description: How log-wiz is structured internally  -  the log pipeline, module map, and build targets.
+---
+
+## Overview
+
+```
+User code
+    │
+    ▼
+┌────────────────────────────────────────────────────┐
+│                  Wiz instance                       │
+│                                                    │
+│  ① Level filter   severity check -> skip or continue│
+│  ② PII masking    deep-clone + redact meta          │
+│  ③ Error parsing  Error -> StackFrame[]              │
+│  ④ Entry assembly readonly LogEntry object          │
+└────────────────────────┬───────────────────────────┘
+                         │ LogEntry (immutable)
+         ┌───────────────┼───────────────┐
+         ▼               ▼               ▼
+  ConsolePretty    ConsoleJson      FileTransport
+  (ANSI colours)   (NDJSON)       (daily rotation)
+                              + ConsoleBrowser
+                                (DevTools groups)
+```
+
+---
+
+## Log pipeline — step by step
+
+### ① Level check
+
+```typescript
+if (LOG_LEVEL_SEVERITY[level] < LOG_LEVEL_SEVERITY[config.level]) return;
+```
+
+If the entry is below the configured threshold it returns immediately.
+In `level: 'none'` mode this is the **only** work done per call — zero allocations.
+
+### ② PII masking
+
+```typescript
+const maskedMeta = maskSensitiveData(options.meta, this.maskedKeys);
+```
+
+Deep-clones the metadata object, replacing sensitive keys with `'[MASKED]'`.
+A `WeakSet` tracks visited objects to handle circular references without throwing.
+
+### ③ Error parsing
+
+```typescript
+const parsedErr = options.error ? parseError(options.error) : undefined;
+```
+
+Converts an `Error` instance into a structured `ParsedError` with a `StackFrame[]` array — function name, file, line, and column per frame.
+
+### ④ Entry assembly
+
+```typescript
+const entry: LogEntry = {
+  timestamp, level, env, message,
+  scope?, correlationId?, meta?, error?
+};
+```
+
+The `LogEntry` is a plain readonly object. Once assembled it is never mutated.
+
+### ⑤ Transport dispatch
+
+```typescript
+for (const transport of this.transports) {
+  transport.write(entry);
+}
+```
+
+Every registered transport receives the same immutable entry.
+
+---
+
+## Module map
+
+| Module | Path | Responsibility |
+|--------|------|----------------|
+| Types | `src/types/index.ts` | All public interfaces and level constants |
+| Wiz | `src/core/wiz.ts` | Pipeline, level filter, transport factory |
+| Masker | `src/utils/masker.ts` | Recursive PII masking + circular-ref guard |
+| ErrorParser | `src/utils/error-parser.ts` | `Error` → `ParsedError` + `StackFrame[]` |
+| Timestamp | `src/utils/timestamp.ts` | ISO-8601 via `Date.toISOString()` |
+| Env | `src/utils/env.ts` | Node / browser / production detection |
+| PrettyTransport | `src/transports/console-pretty.ts` | ANSI-coloured dev output |
+| JsonTransport | `src/transports/console-json.ts` | Single-line JSON |
+| BrowserTransport | `src/transports/console-browser.ts` | Grouped DevTools output |
+| FileTransport | `src/transports/file.ts` | Daily rotation + async buffer |
+
+---
+
+## Build targets
+
+| Target | Config | Output | Consumers |
+|--------|--------|--------|-----------|
+| ESM | `tsconfig.esm.json` | `dist/esm/` | Vite, Rollup, esbuild |
+| CJS | `tsconfig.cjs.json` | `dist/cjs/` | Node.js `require()`, Jest |
+| Browser | `tsconfig.browser.json` | `dist/browser/` | Browser bundles — no `fs` |
+| Types | `tsconfig.types.json` | `dist/types/` | TypeScript declarations |
+
+The `exports` field in `package.json` routes each consumer to the correct target automatically.
+
+---
+
+## Tree-shaking
+
+`"sideEffects": false` in `package.json` tells every bundler the package is side-effect-free. The `FileTransport` is lazily imported inside `Wiz` so it is completely absent from browser bundles.
