@@ -1,0 +1,143 @@
+---
+title: File Rotation
+description: Daily log rotation, async buffering, and retention management.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Overview
+
+The `FileTransport` writes NDJSON (one JSON entry per line) to **daily rotating log files** using Node.js `fs.createWriteStream` in append mode. It is entirely non-blocking.
+
+```
+logs/
+├── 2024-05-12.log   ← auto-pruned
+├── 2024-05-13.log   ← auto-pruned
+├── 2024-05-14.log
+└── 2024-05-15.log   ← active WriteStream
+```
+
+---
+
+## Basic setup
+
+```typescript
+import { Wiz } from "@gouranga_samrat/log-wiz";
+
+const logger = new Wiz({
+  file: {
+    dir: "./logs",
+    maxFiles: 7,
+  },
+});
+```
+
+log-wiz creates `./logs/` if it doesn't exist, and starts writing to `YYYY-MM-DD.log`.
+
+---
+
+## Async buffer
+
+For high-throughput applications, enable the async buffer to batch writes:
+
+```typescript
+const logger = new Wiz({
+  file: {
+    dir: "./logs",
+    maxFiles: 14,
+    asyncBuffer: true,    // batch writes (default: true)
+    bufferSize: 200,      // flush every 200 entries…
+    flushIntervalMs: 500, // …or every 500 ms, whichever comes first
+  },
+});
+```
+
+With async buffering, the event loop is never blocked by disk I/O. A timer (`setInterval`) is used internally with `unref()` so it doesn't prevent process exit.
+
+---
+
+## Day rollover
+
+At midnight, log-wiz automatically:
+
+1. Flushes the current buffer to the old file
+2. Closes the active `WriteStream`
+3. Opens a new `WriteStream` for the new date
+4. Prunes files exceeding `maxFiles`
+
+No entries are lost during rollover.
+
+---
+
+## Retention and pruning
+
+Files are pruned by **date sort** — the oldest files are deleted first. Only files matching the `YYYY-MM-DD.log` pattern in the configured `dir` are considered.
+
+```typescript
+// Keep 30 days of logs
+const logger = new Wiz({
+  file: { dir: "./logs", maxFiles: 30 },
+});
+```
+
+<Aside type="caution">
+  Pruning happens during a day rollover, not on startup. If you restart the process
+  on the same day, no pruning occurs until midnight.
+</Aside>
+
+---
+
+## Graceful shutdown
+
+Always flush and close before your process exits:
+
+```typescript
+// Handle all termination signals
+for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) {
+  process.on(signal, async () => {
+    logger.flush();          // synchronous drain
+    await logger.close();    // close WriteStream
+    process.exit(0);
+  });
+}
+
+// Also handle uncaught errors
+process.on("uncaughtException", async (err) => {
+  logger.fatal("Uncaught exception", { error: err });
+  await logger.close();
+  process.exit(1);
+});
+```
+
+---
+
+## Disabling file output
+
+```typescript
+// Console only — no file transport
+const logger = new Wiz({ file: false });
+```
+
+<Aside type="tip">
+  Always use `file: false` in tests. It avoids creating `logs/` directories
+  in your project root and keeps tests fast.
+</Aside>
+
+---
+
+## Multiple directories
+
+Create separate instances with different `dir` settings:
+
+```typescript
+const appLogger = new Wiz({
+  scope: "app",
+  file: { dir: "./logs/app", maxFiles: 7 },
+});
+
+const auditLogger = new Wiz({
+  scope: "audit",
+  format: "json",
+  file: { dir: "./logs/audit", maxFiles: 90 }, // keep 3 months
+});
+```
