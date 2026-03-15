@@ -1,0 +1,127 @@
+---
+title: Multi-Instance Loggers
+description: Create independent scoped loggers for each subsystem in your application.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Each `new Wiz(config)` is a fully independent logger — separate level, masked keys, transports, scope, and correlation ID. Instances share no global state.
+
+---
+
+## Basic scoped instances
+
+```typescript
+import { Wiz } from "@gouranga_samrat/log-wiz";
+
+const dbLogger   = new Wiz({ scope: "database", level: "debug" });
+const httpLogger = new Wiz({ scope: "http",     level: "info"  });
+const authLogger = new Wiz({ scope: "auth",     level: "trace" });
+
+dbLogger.debug("Connection pool ready", { meta: { poolSize: 10 } });
+// -> █ DBG  ... [database] Connection pool ready
+
+httpLogger.info("GET /healthz -> 200", { meta: { latencyMs: 2 } });
+// -> █ INF  ... [http] GET /healthz -> 200
+
+authLogger.warn("Failed login attempt", { meta: { ip: "1.2.3.4", attempts: 3 } });
+// -> █ WRN  ... [auth] Failed login attempt
+```
+
+---
+
+## Correlation IDs across instances
+
+Attach a per-request ID to link related entries across all loggers:
+
+```typescript
+import { Wiz } from "@gouranga_samrat/log-wiz";
+
+const db   = new Wiz({ scope: "db" });
+const http = new Wiz({ scope: "http" });
+
+// Express middleware
+app.use((req, res, next) => {
+  const requestId = req.headers["x-request-id"] as string ?? crypto.randomUUID();
+  req.requestId = requestId;
+  next();
+});
+
+// In your route handler — pass correlationId per call
+app.post("/users", async (req, res) => {
+  const cid = req.requestId;
+
+  http.info("Incoming request", { correlationId: cid, meta: { path: req.path } });
+  db.debug("Running INSERT", { correlationId: cid, meta: { table: "users" } });
+  http.info("Response sent", { correlationId: cid, meta: { status: 201 } });
+});
+```
+
+All three entries share the same `correlationId`, making them trivially filterable in any log aggregator.
+
+---
+
+## Instance-level correlation ID
+
+For workers, jobs, or connection handlers where every log always shares the same ID:
+
+```typescript
+const workerLogger = new Wiz({
+  scope: "queue-worker",
+  correlationId: `worker-${process.pid}`,
+  level: "info",
+});
+
+// Every entry from this instance carries correlationId automatically
+workerLogger.info("Job started", { meta: { jobId: "j-123" } });
+workerLogger.info("Job complete", { meta: { duration: "142ms" } });
+```
+
+---
+
+## Different file directories per instance
+
+```typescript
+const appLogger = new Wiz({
+  scope: "app",
+  file: { dir: "./logs/app", maxFiles: 7 },
+});
+
+const accessLogger = new Wiz({
+  scope: "access",
+  format: "json",
+  file: { dir: "./logs/access", maxFiles: 30 },
+});
+```
+
+---
+
+## Module-level pattern
+
+Export a logger instance per module — the Node.js module cache ensures it's a singleton within that module:
+
+```typescript
+// src/services/payment.ts
+import { Wiz } from "@gouranga_samrat/log-wiz";
+
+export const logger = new Wiz({
+  scope: "payment",
+  level: process.env.NODE_ENV === "production" ? "info" : "debug",
+  file: { dir: "./logs", maxFiles: 7 },
+});
+```
+
+```typescript
+// src/services/payment.ts — usage
+import { logger } from "./logger";
+
+export async function chargeCard(amount: number) {
+  logger.info("Charging card", { meta: { amount } });
+}
+```
+
+<Aside type="tip">
+  The default `wiz` singleton works great for simple scripts and small apps.
+  Reach for `new Wiz({ scope })` when you need per-subsystem control over
+  levels, file paths, or masking rules.
+</Aside>
