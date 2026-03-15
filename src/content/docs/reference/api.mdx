@@ -1,0 +1,188 @@
+---
+title: API Reference
+description: Complete method signatures, parameters, and examples for every public API.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Default singleton
+
+```typescript
+import { wiz } from "@gouranga_samrat/log-wiz";
+```
+
+A pre-built `Wiz` instance with auto-detected defaults. Use this for simple scripts and small apps.
+
+---
+
+## `new Wiz(config?)`
+
+Creates a new independent logger instance.
+
+```typescript
+import { Wiz } from "@gouranga_samrat/log-wiz";
+
+const logger = new Wiz(config?: WizConfig);
+```
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|:--------:|-------------|
+| `config` | `WizConfig` | No | Instance configuration. See [Configuration](/log-wiz-docs/reference/configuration/) for all options. |
+
+**Example:**
+
+```typescript
+const logger = new Wiz({
+  scope: "api",
+  level: "debug",
+  file: { dir: "./logs", maxFiles: 7 },
+});
+```
+
+---
+
+## Log methods
+
+All six log methods share the same signature:
+
+```typescript
+logger.trace(message: string, options?: LogCallOptions): void
+logger.debug(message: string, options?: LogCallOptions): void
+logger.info (message: string, options?: LogCallOptions): void
+logger.warn (message: string, options?: LogCallOptions): void
+logger.error(message: string, options?: LogCallOptions): void
+logger.fatal(message: string, options?: LogCallOptions): void
+```
+
+### Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|:--------:|-------------|
+| `message` | `string` | **Yes** | Primary human-readable log message |
+| `options.meta` | `Record<string, unknown>` | No | Structured metadata. Deep-cloned and PII-masked before output. |
+| `options.error` | `Error` | No | Error object. Stack trace is parsed into structured `StackFrame[]`. |
+| `options.correlationId` | `string` | No | Overrides the instance-level `correlationId` for this call only. |
+
+### Examples
+
+```typescript
+// Message only
+logger.info("Server started");
+
+// With metadata
+logger.info("Request completed", {
+  meta: { method: "POST", path: "/users", statusCode: 201, durationMs: 14 },
+});
+
+// With error
+logger.error("Database query failed", {
+  error: new Error("ECONNREFUSED"),
+  meta: { host: "db.internal", port: 5432 },
+});
+
+// With per-call correlationId
+logger.info("Processing item", {
+  correlationId: job.id,
+  meta: { itemId: item.id, queue: "high-priority" },
+});
+
+// All options combined
+logger.fatal("Critical failure", {
+  correlationId: "req-abc-123",
+  meta: { component: "payment-processor", retries: 3 },
+  error: new TypeError("Cannot read properties of null"),
+});
+```
+
+---
+
+## `logger.setConfig(partial)`
+
+Merges a partial config update into the running instance at runtime.
+
+```typescript
+logger.setConfig(updates: Partial<WizConfig>): void
+```
+
+Rebuilds transports automatically when `format` or `file` changes.
+
+```typescript
+// Change level at runtime
+logger.setConfig({ level: "debug" });
+
+// Switch to JSON format
+logger.setConfig({ format: "json" });
+
+// Disable file output
+logger.setConfig({ file: false });
+
+// Add masked keys
+logger.setConfig({ maskedKeys: ["sessionToken", "internalId"] });
+```
+
+---
+
+## `logger.flush()`
+
+Synchronously flushes all buffered entries to their transports.
+
+```typescript
+logger.flush(): void
+```
+
+Call this before a graceful shutdown to ensure no buffered file entries are lost.
+
+```typescript
+process.on("SIGTERM", async () => {
+  logger.flush();         // synchronous flush
+  await logger.close();   // then async close
+  process.exit(0);
+});
+```
+
+---
+
+## `logger.close()`
+
+Flushes all buffers and asynchronously releases all transport resources (file handles, timers, etc.).
+
+```typescript
+logger.close(): Promise<void>
+```
+
+Always `await` this before `process.exit()` when using the file transport.
+
+```typescript
+await logger.close();
+```
+
+---
+
+## `LogCallOptions`
+
+```typescript
+interface LogCallOptions {
+  readonly correlationId?: string;
+  readonly meta?: Record<string, unknown>;
+  readonly error?: Error;
+}
+```
+
+---
+
+## `wiz.config()` — global singleton helper
+
+The default `wiz` singleton can be reconfigured at any time:
+
+```typescript
+import { wiz } from "@gouranga_samrat/log-wiz";
+
+wiz.setConfig({ level: "debug", format: "json" });
+```
+
+<Aside type="tip">
+  Reconfiguring the singleton affects all code that imports `wiz`.
+  For isolated control, create a named `new Wiz()` instance instead.
+</Aside>
