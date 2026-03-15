@@ -1,0 +1,162 @@
+---
+title: Transports
+description: Built-in transports and how to write your own.
+---
+
+import { Aside, Tabs, TabItem } from '@astrojs/starlight/components';
+
+A **transport** is any object that receives a resolved `LogEntry` and writes it somewhere —
+console, file, HTTP endpoint, cloud sink, etc.
+
+---
+
+## Transport interface
+
+```typescript
+import type { Transport, LogEntry } from "@gouranga_samrat/log-wiz";
+
+interface Transport {
+  write(entry: LogEntry): void;    // called for every entry passing the level filter
+  flush?(): void;                   // drain in-memory buffer synchronously
+  close?(): Promise<void>;          // release resources (handles, timers, etc.)
+}
+```
+
+---
+
+## Built-in transports
+
+### ConsolePrettyTransport
+
+Auto-selected in **development** (`NODE_ENV` ≠ `production`, not in browser).
+
+Rich multi-line ANSI output — uses native escape codes, zero dependencies.
+
+```
+█ INF  2024-05-15 14:32:01.123 [auth] {req-abc} User signed in
+  meta: {
+    "userId": 42,
+    "sessionExpiry": "2024-05-16T00:00:00.000Z"
+  }
+
+█ ERR  2024-05-15 14:32:02.456 [db] Query failed
+  TypeError: Cannot read properties of null (reading "rows")
+    at executeQuery   (src/db/client.ts:42:12)
+    at UserRepository (src/repos/user.ts:18:5)
+```
+
+| Level | console method |
+|-------|---------------|
+| `trace` `debug` `info` | `console.log` |
+| `warn` | `console.warn` |
+| `error` `fatal` | `console.error` |
+
+---
+
+### ConsoleJsonTransport
+
+Auto-selected in **production** (`NODE_ENV=production` or `CI=true`).
+
+Single-line NDJSON per entry — ready for ELK, Datadog, New Relic, Splunk, GCP Logging.
+
+```json
+{"timestamp":"2024-05-15T14:32:01.123Z","level":"info","env":"node","scope":"auth","message":"User signed in","meta":{"userId":42}}
+```
+
+---
+
+### ConsoleBrowserTransport
+
+Auto-selected in **browser** environments.
+
+Uses `console.groupCollapsed` to keep DevTools clean:
+
+- Entries **without** metadata: single flat line with emoji badge
+- Entries **with** metadata or errors: expandable group
+
+Works in Chrome DevTools, Firefox DevTools, and any standard browser console.
+
+---
+
+### FileTransport *(Node.js only)*
+
+Stream-based daily log rotation:
+
+```
+logs/
+├── 2024-05-13.log   ← auto-pruned after maxFiles exceeded
+├── 2024-05-14.log
+└── 2024-05-15.log   ← active WriteStream (append mode)
+```
+
+```typescript
+import { Wiz } from "@gouranga_samrat/log-wiz";
+
+const logger = new Wiz({
+  file: {
+    dir: "./logs",
+    maxFiles: 7,          // retain one week
+    asyncBuffer: true,
+    bufferSize: 100,      // flush every 100 entries…
+    flushIntervalMs: 1000 // …or every 1 second
+  },
+});
+```
+
+Disable with `file: false`.
+
+<Aside type="note">
+  The `FileTransport` is dynamically imported, so it is **completely absent** from
+  browser bundles — `fs` and `path` never appear in browser output.
+</Aside>
+
+---
+
+## Format auto-detection
+
+| Condition (checked in order) | Transport selected |
+|------------------------------|-------------------|
+| `typeof window !== 'undefined'` | `ConsoleBrowserTransport` |
+| `NODE_ENV === 'production'` or `CI === 'true'` | `ConsoleJsonTransport` |
+| Everything else | `ConsolePrettyTransport` |
+
+Override with `format: 'pretty' | 'json' | 'browser'`.
+
+---
+
+## Writing a custom transport
+
+```typescript
+import type { Transport, LogEntry } from "@gouranga_samrat/log-wiz";
+import { Wiz } from "@gouranga_samrat/log-wiz";
+
+class DatadogTransport implements Transport {
+  private queue: string[] = [];
+
+  write(entry: LogEntry): void {
+    this.queue.push(JSON.stringify(entry));
+    if (this.queue.length >= 25) this.flush();
+  }
+
+  flush(): void {
+    if (!this.queue.length) return;
+    const batch = this.queue.splice(0);
+    fetch("https://http-intake.logs.datadoghq.com/api/v2/logs", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "DD-API-KEY": process.env["DD_API_KEY"] ?? "",
+      },
+      body: JSON.stringify(batch),
+    });
+  }
+
+  async close(): Promise<void> {
+    this.flush();
+  }
+}
+
+// Inject alongside existing transports
+const logger = new Wiz({ file: false });
+(logger as any).transports.push(new DatadogTransport());
+```
