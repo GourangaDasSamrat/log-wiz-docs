@@ -1,0 +1,93 @@
+---
+title: log-wiz
+description: The ultra-lightweight, high-performance logger for Node.js and Browser with automatic PII masking and zero dependencies.
+template: splash
+hero:
+  tagline: Ultra-lightweight Node.js & Browser logger. Auto PII masking. Zero dependencies. < 1.5 KB gzipped.
+  actions:
+    - text: Get Started
+      link: /log-wiz-docs/guides/getting-started/
+      icon: right-arrow
+      variant: primary
+    - text: API Reference
+      link: /log-wiz-docs/reference/api/
+      variant: secondary
+    - text: View on GitHub
+      link: https://github.com/GourangaDasSamrat/log-wiz
+      icon: external
+      variant: minimal
+---
+
+import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+<div class="hero-terminal-wrap">
+<div class="hero-terminal">
+<div class="terminal-dots"><span class="t-dot r"></span><span class="t-dot y"></span><span class="t-dot g"></span><span class="t-title">terminal</span></div>
+<div class="terminal-code">
+
+```
+$ npm install @gouranga_samrat/log-wiz
+
+> import { wiz } from "@gouranga_samrat/log-wiz"
+
+> wiz.info("Server started", { meta: { port: 3000 } })
+  INF  2024-05-15 14:32:01.123  Server started  port=3000
+
+> wiz.warn("High memory", { meta: { password: "secret" } })
+  WRN  2024-05-15 14:32:02.456  High memory  password=[MASKED]
+
+> wiz.error("DB failed", { error: new Error("ECONNREFUSED") })
+  ERR  2024-05-15 14:32:03.789  DB failed
+       Error: ECONNREFUSED
+         at connect (src/db/client.ts:22:9)
+```
+
+</div>
+</div>
+</div>
+
+## Why log-wiz?
+
+<CardGrid>
+  <Card title="Zero Dependencies" icon="approve-check-circle">
+    No chalk, no moment, no lodash. Pure native APIs — ANSI codes for colours, built-in `Date` for timestamps. Nothing extra in `node_modules`.
+  </Card>
+  <Card title="Auto PII Masking" icon="warning">
+    Recursively scans every metadata object. `password`, `token`, `secret`, `authorization`, `cookie`, `card_number` and more are replaced with `[MASKED]` before any output.
+  </Card>
+  <Card title="Environment Smart" icon="laptop">
+    Pretty ANSI in development. Compact JSON in production. Grouped DevTools in the browser. Auto-detected — zero config.
+  </Card>
+  <Card title="TypeScript First" icon="document">
+    Written entirely in TypeScript. Full IntelliSense for every config option, log entry field, and method parameter.
+  </Card>
+  <Card title="Daily File Rotation" icon="seti:log">
+    Stream-based writes via `fs.createWriteStream`. Daily archives, configurable retention, automatic pruning. Non-blocking.
+  </Card>
+  <Card title="Multi-Instance" icon="puzzle">
+    `new Wiz({ scope: 'database' })` — independent level, masked keys, transports, and correlation ID per instance.
+  </Card>
+</CardGrid>
+
+## Feature comparison
+
+| Feature | log-wiz | winston | pino |
+|---|:---:|:---:|:---:|
+| Zero runtime dependencies | ✅ | ❌ | ❌ |
+| Auto PII masking | ✅ | ❌ | ❌ |
+| Browser-native (< 1.5 KB) | ✅ | ❌ | ⚠️ |
+| Circular-reference safe | ✅ | ⚠️ | ✅ |
+| Parsed stack traces | ✅ | ❌ | ⚠️ |
+| Multi-instance + scoped | ✅ | ✅ | ✅ |
+| Built-in daily rotation | ✅ | plugin | ✅ |
+| No-op mode (zero overhead) | ✅ | ⚠️ | ⚠️ |
+| Tree-shakable | ✅ | ❌ | ❌ |
+
+## Start exploring
+
+<CardGrid>
+  <LinkCard title="Getting Started" href="/log-wiz-docs/guides/getting-started/" description="Install and write your first log in under 5 minutes." />
+  <LinkCard title="PII Masking" href="/log-wiz-docs/guides/pii-masking/" description="How auto-masking works and how to customise it." />
+  <LinkCard title="Configuration" href="/log-wiz-docs/reference/configuration/" description="Every config option documented with types and defaults." />
+  <LinkCard title="API Reference" href="/log-wiz-docs/reference/api/" description="Complete method signatures with examples." />
+</CardGrid>
