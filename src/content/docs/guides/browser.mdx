@@ -1,0 +1,131 @@
+---
+title: Browser Usage
+description: Using log-wiz in React, Vue, Svelte, and other browser environments.
+---
+
+import { Aside, Tabs, TabItem } from '@astrojs/starlight/components';
+
+## Overview
+
+log-wiz works natively in the browser. When `typeof window !== 'undefined'`, it automatically switches to `ConsoleBrowserTransport` and the bundle is **under 1.5 KB gzipped** — all Node.js file-system code is excluded at the bundler level.
+
+---
+
+## Installation in browser frameworks
+
+<Tabs>
+  <TabItem label="React">
+    ```bash
+    npm install @gouranga_samrat/log-wiz
+    ```
+    ```typescript
+    // src/lib/logger.ts
+    import { Wiz } from '@gouranga_samrat/log-wiz';
+
+    export const logger = new Wiz({
+      scope: 'react-app',
+      level: import.meta.env.DEV ? 'debug' : 'info',
+      file: false, // no file transport in browser
+    });
+    ```
+  </TabItem>
+  <TabItem label="Vue">
+    ```bash
+    npm install @gouranga_samrat/log-wiz
+    ```
+    ```typescript
+    // src/plugins/logger.ts
+    import { Wiz } from '@gouranga_samrat/log-wiz';
+    import type { App } from 'vue';
+
+    export const logger = new Wiz({ scope: 'vue-app', file: false });
+
+    export default {
+      install(app: App) {
+        app.config.globalProperties.$logger = logger;
+      },
+    };
+    ```
+  </TabItem>
+  <TabItem label="Svelte">
+    ```bash
+    npm install @gouranga_samrat/log-wiz
+    ```
+    ```typescript
+    // src/lib/logger.ts
+    import { Wiz } from '@gouranga_samrat/log-wiz';
+
+    export const logger = new Wiz({
+      scope: 'svelte-app',
+      level: 'info',
+      file: false,
+    });
+    ```
+  </TabItem>
+</Tabs>
+
+---
+
+## Browser output
+
+In the browser, `ConsoleBrowserTransport` uses `console.groupCollapsed` for entries with metadata or errors, keeping DevTools clean:
+
+```
+ℹ️ INFO  14:32:01.123 [react-app] Component mounted
+▶ [warn] WARN  14:32:02.456 [react-app] API response slow
+    meta { latencyMs: 3200, endpoint: "/api/users" }
+▶ [no] ERROR  14:32:03.789 [react-app] Unhandled rejection
+    TypeError: Cannot read properties of undefined
+      at fetchUser  (src/api/users.ts:42:12)
+```
+
+---
+
+## Tree-shaking
+
+Because the `file` transport is dynamically imported and the `browser` export condition completely excludes it, bundlers like Vite, Rollup, and webpack will never include `fs` or `path` in browser builds.
+
+```typescript
+// This import is safe in any browser framework
+import { Wiz } from "@gouranga_samrat/log-wiz";
+```
+
+---
+
+## Global error handler
+
+Catch unhandled errors and promise rejections:
+
+```typescript
+import { wiz } from "@gouranga_samrat/log-wiz";
+
+window.addEventListener("error", (event) => {
+  wiz.error("Unhandled error", {
+    error: event.error as Error,
+    meta: { filename: event.filename, lineno: event.lineno },
+  });
+});
+
+window.addEventListener("unhandledrejection", (event) => {
+  wiz.error("Unhandled promise rejection", {
+    error: event.reason instanceof Error ? event.reason : new Error(String(event.reason)),
+  });
+});
+```
+
+---
+
+## Forcing browser format in SSR
+
+If your framework runs in both browser and Node.js (e.g. Next.js, Nuxt, SvelteKit), force the browser format where needed:
+
+```typescript
+const logger = new Wiz({
+  format: typeof window !== "undefined" ? "browser" : "json",
+  file: false,
+});
+```
+
+<Aside type="tip">
+  For SSR frameworks, create one logger for the server (JSON format, optional file) and one for the client (browser format, no file), and export them separately.
+</Aside>
