@@ -1,0 +1,100 @@
+---
+title: Installation
+description: Requirements, package managers, and TypeScript setup for log-wiz.
+---
+
+import { Tabs, TabItem, Aside } from '@astrojs/starlight/components';
+
+## Requirements
+
+| Requirement | Minimum |
+|-------------|---------|
+| Node.js | **18.x** or later |
+| TypeScript | **4.7** or later (optional) |
+| Browser | Chrome 90+, Firefox 88+, Safari 14+ |
+| Runtime dependencies | **0** |
+
+---
+
+## Package managers
+
+<Tabs>
+  <TabItem label="npm">
+    ```bash
+    npm install @gouranga_samrat/log-wiz
+    ```
+  </TabItem>
+  <TabItem label="yarn">
+    ```bash
+    yarn add @gouranga_samrat/log-wiz
+    ```
+  </TabItem>
+  <TabItem label="pnpm">
+    ```bash
+    pnpm add @gouranga_samrat/log-wiz
+    ```
+  </TabItem>
+  <TabItem label="bun">
+    ```bash
+    bun add @gouranga_samrat/log-wiz
+    ```
+  </TabItem>
+</Tabs>
+
+---
+
+## Module formats
+
+log-wiz ships four compiled targets. Your toolchain picks the right one automatically via the `exports` field in `package.json`.
+
+| Format | Path | Used by |
+|--------|------|---------|
+| ESM | `dist/esm/` | Vite, Rollup, esbuild, native `import` |
+| CJS | `dist/cjs/` | Node.js `require()`, Jest |
+| Browser | `dist/browser/` | Browser bundles — `fs`/`path` excluded |
+| Types | `dist/types/` | TypeScript declarations |
+
+<Aside type="note">
+  The `browser` export condition strips all Node.js file-system code, keeping the browser bundle under **1.5 KB gzipped**.
+</Aside>
+
+---
+
+## TypeScript setup
+
+log-wiz works with any reasonable `tsconfig.json`. For best results:
+
+```json
+{
+  "compilerOptions": {
+    "strict": true,
+    "moduleResolution": "bundler",
+    "esModuleInterop": true
+  }
+}
+```
+
+All types ship with the package — no `@types/` package needed:
+
+```typescript
+import type {
+  WizConfig,
+  LogEntry,
+  LogLevel,
+  Transport,
+} from "@gouranga_samrat/log-wiz";
+```
+
+---
+
+## Verify installation
+
+```bash
+node -e "import('@gouranga_samrat/log-wiz').then(m => m.wiz.info('install OK'))"
+```
+
+Expected output:
+
+```
+INF  2024-05-15 14:32:01.123  install OK
+```
