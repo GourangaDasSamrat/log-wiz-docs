@@ -1,0 +1,113 @@
+---
+title: Log Levels
+description: Understanding log levels, severity order, and filtering in log-wiz.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Level hierarchy
+
+log-wiz supports seven levels in ascending severity order:
+
+| Level | Severity | Badge | When to use |
+|-------|:--------:|-------|-------------|
+| `trace` | 10 | TRACE | Step-by-step debugging, very high volume |
+| `debug` | 20 | DEBUG | Development diagnostics |
+| `info` | 30 | INFO | Normal operational events |
+| `warn` | 40 | WARN | Unexpected but recoverable |
+| `error` | 50 | ERROR | An operation failed |
+| `fatal` | 60 | FATAL | Process-level failure |
+| `none` | Inf | — | Silence all output (no-op mode) |
+
+---
+
+## Filtering
+
+Setting a level on your logger **drops all entries below that severity**:
+
+```typescript
+import { Wiz } from "@gouranga_samrat/log-wiz";
+
+const logger = new Wiz({ level: "warn" });
+
+logger.trace("ignored");  // severity 10 < 40 -> dropped
+logger.debug("ignored");  // severity 20 < 40 -> dropped
+logger.info("ignored");   // severity 30 < 40 -> dropped
+logger.warn("logged [ok]");  // severity 40 = 40 -> written
+logger.error("logged [ok]"); // severity 50 > 40 -> written
+logger.fatal("logged [ok]"); // severity 60 > 40 -> written
+```
+
+---
+
+## Default level
+
+The default level is **`info`** — `trace` and `debug` are dropped unless you explicitly lower it.
+
+```typescript
+// Development: lower to debug to see more detail
+const logger = new Wiz({ level: "debug" });
+
+// Production: keep at info or higher
+const logger = new Wiz({ level: "info" });
+```
+
+---
+
+## No-op mode
+
+Set `level: 'none'` to **completely silence** the logger without removing any code.
+Every log call returns immediately — no string formatting, no masking, no I/O.
+True zero overhead.
+
+```typescript
+const logger = new Wiz({
+  level: process.env.NODE_ENV === "test" ? "none" : "info",
+});
+```
+
+<Aside type="tip">
+  No-op mode is the correct way to silence logs in tests. Unlike mocking console,
+  it doesn't require any setup/teardown and adds zero overhead.
+</Aside>
+
+---
+
+## Runtime level change
+
+Use `setConfig()` to change the level without creating a new instance:
+
+```typescript
+const logger = new Wiz({ level: "info" });
+
+// Increase verbosity on demand (e.g. triggered by a signal or feature flag)
+process.on("SIGUSR1", () => {
+  logger.setConfig({ level: "debug" });
+  logger.info("Log level changed to debug");
+});
+
+// Silence during shutdown
+process.on("SIGTERM", async () => {
+  logger.setConfig({ level: "none" });
+  await logger.close();
+  process.exit(0);
+});
+```
+
+---
+
+## Level in TypeScript
+
+The `LogLevel` type is exported for use in your own code:
+
+```typescript
+import type { LogLevel } from "@gouranga_samrat/log-wiz";
+import { LOG_LEVEL_SEVERITY } from "@gouranga_samrat/log-wiz";
+
+function isAtLeast(entry: LogLevel, threshold: LogLevel): boolean {
+  return LOG_LEVEL_SEVERITY[entry] >= LOG_LEVEL_SEVERITY[threshold];
+}
+
+isAtLeast("error", "warn");  // true
+isAtLeast("debug", "info");  // false
+```
