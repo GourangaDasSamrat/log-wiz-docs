@@ -1,0 +1,143 @@
+---
+title: Custom Transports
+description: Write your own transport to send logs anywhere.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Any object implementing the `Transport` interface can be injected into a `Wiz` instance.
+
+## Transport interface
+
+```typescript
+import type { Transport, LogEntry } from "@gouranga_samrat/log-wiz";
+
+interface Transport {
+  write(entry: LogEntry): void;   // required — called per entry
+  flush?(): void;                  // optional — drain buffer synchronously
+  close?(): Promise<void>;         // optional — release resources
+}
+```
+
+---
+
+## Example: Datadog
+
+```typescript
+import type { Transport, LogEntry } from "@gouranga_samrat/log-wiz";
+
+export class DatadogTransport implements Transport {
+  private queue: LogEntry[] = [];
+
+  write(entry: LogEntry): void {
+    this.queue.push(entry);
+    if (this.queue.length >= 25) this.flush();
+  }
+
+  flush(): void {
+    if (!this.queue.length) return;
+    const batch = this.queue.splice(0);
+    fetch("https://http-intake.logs.datadoghq.com/api/v2/logs", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "DD-API-KEY": process.env["DD_API_KEY"] ?? "",
+      },
+      body: JSON.stringify(batch),
+    });
+  }
+
+  async close(): Promise<void> {
+    this.flush();
+  }
+}
+```
+
+---
+
+## Example: Slack alerts (fatal only)
+
+```typescript
+import type { Transport, LogEntry } from "@gouranga_samrat/log-wiz";
+
+export class SlackAlertTransport implements Transport {
+  constructor(private readonly webhookUrl: string) {}
+
+  write(entry: LogEntry): void {
+    if (entry.level !== "fatal") return; // only fatal
+
+    fetch(this.webhookUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        text: `🚨 *FATAL* — ${entry.message}`,
+        attachments: entry.meta
+          ? [{ text: JSON.stringify(entry.meta, null, 2) }]
+          : undefined,
+      }),
+    });
+  }
+}
+```
+
+---
+
+## Example: In-memory buffer (testing)
+
+Useful for asserting log output in tests without mocking `console`:
+
+```typescript
+import type { Transport, LogEntry } from "@gouranga_samrat/log-wiz";
+import { Wiz } from "@gouranga_samrat/log-wiz";
+
+class MemoryTransport implements Transport {
+  public readonly entries: LogEntry[] = [];
+  write(entry: LogEntry): void { this.entries.push(entry); }
+}
+
+// In your test
+const mem = new MemoryTransport();
+const logger = new Wiz({ level: "trace", file: false });
+(logger as any).transports = [mem];
+
+logger.info("order created", { meta: { orderId: "123" } });
+
+expect(mem.entries[0]?.level).toBe("info");
+expect(mem.entries[0]?.message).toBe("order created");
+expect(mem.entries[0]?.meta?.orderId).toBe("123");
+```
+
+---
+
+## Injecting a transport
+
+```typescript
+import { Wiz } from "@gouranga_samrat/log-wiz";
+
+const logger = new Wiz({ file: false });
+(logger as any).transports.push(new DatadogTransport());
+(logger as any).transports.push(new SlackAlertTransport(process.env.SLACK_WEBHOOK!));
+```
+
+<Aside type="note">
+  The `transports` array is a private property. The `(logger as any)` cast is intentional — a formal `addTransport()` API is planned for v1.1.
+</Aside>
+
+---
+
+## LogEntry shape
+
+Every transport receives a fully resolved, immutable `LogEntry`:
+
+```typescript
+interface LogEntry {
+  readonly timestamp: string;       // ISO-8601 or "" if omitTimestamp
+  readonly level: Exclude<LogLevel, "none">;
+  readonly env: "node" | "browser";
+  readonly message: string;
+  readonly scope?: string;
+  readonly correlationId?: string;
+  readonly meta?: Record<string, unknown>;  // already masked
+  readonly error?: ParsedError;
+}
+```
