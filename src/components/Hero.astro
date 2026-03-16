@@ -1,0 +1,99 @@
+---
+import type { Props } from '@astrojs/starlight/props';
+---
+
+<div class="hero-wrapper">
+  <div class="orb orb-1" aria-hidden="true"></div>
+  <div class="orb orb-2" aria-hidden="true"></div>
+  <div class="orb orb-3" aria-hidden="true"></div>
+
+  <div class="hero-inner">
+
+    <div class="hero-badge">
+      <span class="badge-dot"></span>
+      <span>v1.0.0 &mdash; Now on npm</span>
+    </div>
+
+    <h1 class="hero-title">
+      The wizard of<br/>
+      <span class="gradient-text">application logging</span>
+    </h1>
+
+    <p class="hero-sub">
+      Ultra-lightweight, high-performance logger for <strong>Node.js</strong> and <strong>Browser</strong>
+      with automatic PII masking, zero dependencies, and full TypeScript support.
+    </p>
+
+    <div class="hero-pills">
+      <div class="pill"><span class="pill-icon" aria-hidden="true">&#9889;</span> &lt; 1.5 KB gzipped</div>
+      <div class="pill"><span class="pill-icon" aria-hidden="true">&#128274;</span> Auto PII masking</div>
+      <div class="pill"><span class="pill-icon" aria-hidden="true">&#10003;</span> Zero dependencies</div>
+      <div class="pill"><span class="pill-icon" aria-hidden="true">&#127760;</span> Node + Browser</div>
+    </div>
+
+    <div class="hero-ctas">
+      <a href="/log-wiz-docs/guides/getting-started/" class="cta-primary">
+        Get Started &rarr;
+      </a>
+      <a href="/log-wiz-docs/reference/api/" class="cta-secondary">
+        API Reference
+      </a>
+      <a href="https://github.com/GourangaDasSamrat/log-wiz" class="cta-ghost" target="_blank" rel="noopener">
+        GitHub
+      </a>
+    </div>
+
+    <div class="terminal">
+      <div class="terminal-bar">
+        <span class="dot red"></span>
+        <span class="dot yellow"></span>
+        <span class="dot green"></span>
+        <span class="terminal-title">terminal</span>
+      </div>
+      <div class="terminal-body">
+        <div class="t-line">
+          <span class="t-prompt">$</span>
+          <span class="t-cmd">npm install <span class="t-pkg">@gouranga_samrat/log-wiz</span></span>
+        </div>
+        <div class="t-line t-output">
+          <span class="t-dim">added 1 package in 0.312s</span>
+        </div>
+        <div class="t-spacer"></div>
+        <div class="t-line">
+          <span class="t-prompt">&gt;</span>
+          <span class="t-cmd">
+            <span class="t-kw">import</span> { wiz }
+            <span class="t-kw">from</span>
+            <span class="t-str">'@gouranga_samrat/log-wiz'</span>
+          </span>
+        </div>
+        <div class="t-line">
+          <span class="t-prompt">&gt;</span>
+          <span class="t-cmd">
+            wiz.<span class="t-fn">info</span>(<span class="t-str">'Server started'</span>,
+            { meta: { port: <span class="t-num">3000</span> } })
+          </span>
+        </div>
+        <div class="t-line t-output">
+          <span class="t-badge-inf">INF</span>
+          <span class="t-ts">2024-05-15 14:32:01.123</span>
+          <span class="t-msg">Server started</span>
+          <span class="t-meta">port=3000</span>
+        </div>
+        <div class="t-line">
+          <span class="t-prompt">&gt;</span>
+          <span class="t-cmd">
+            wiz.<span class="t-fn-warn">warn</span>(<span class="t-str">'High memory'</span>,
+            { meta: { password: <span class="t-str">'secret'</span> } })
+          </span>
+        </div>
+        <div class="t-line t-output">
+          <span class="t-badge-wrn">WRN</span>
+          <span class="t-ts">2024-05-15 14:32:02.456</span>
+          <span class="t-msg-warn">High memory</span>
+          <span class="t-masked">password=[MASKED]</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
